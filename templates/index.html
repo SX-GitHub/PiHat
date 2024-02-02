@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Babylon Template</title>
+
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;        
+            overflow: hidden;   
+        }
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        .btn-group {
+            position: fixed;
+            border-radius: 0.75rem;
+            border: none;
+            outline: none;
+            bottom: 5rem;
+            right: 5rem;
+            z-index: 99;
+            overflow: hidden;  
+            background-color: #daa520;
+            box-shadow: 4px 4px 8px rgb(0, 0, 0, 0.3);
+        }
+        .btn-group > .btn {
+            background-color: #daa520;
+            min-width: 3rem;
+            min-height: 3rem;
+            color: #000;
+            font-size: 1.5rem;
+            border-radius: 0.75rem;
+            border: none;
+        }
+        .btn-group > .btn:hover, .btn-group > .btn:focus, .btn-group > .btn:active {
+            background-color: #daa520;
+            color: #fff;
+            border-radius: 0.75rem;
+            outline: none;
+            outline-style: none;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+    </style>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/solid.min.css') }}">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/fontawesome.min.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="https://code.jquery.com/pep/0.4.3/pep.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+</head>
+<body>
+    <div class="canvas-container text-center">
+        <canvas id="renderCanvas" touch-action="none"></canvas>
+        <div class="btn-group">
+            <button type="button" class="btn" title="⭠"><i class="fa-solid fa-circle-left"></i></button>
+            <button type="button" class="btn" title="⭢"><i class="fa-solid fa-circle-right"></i></button>
+            <button type="button" class="btn" title="⭡"><i class="fa-solid fa-circle-up"></i></button>
+            <button type="button" class="btn" title="⭣"><i class="fa-solid fa-circle-down"></i></button>
+            <button type="button" class="btn" title="⭯"><i class="fa-solid fa-arrow-rotate-left"></i></button>
+        </div>
+    </div>
+    <script>
+      const canvas = document.getElementById("renderCanvas"); // Get the canvas element
+      const engine = new BABYLON.Engine(canvas, true); // Generate the BABYLON 3D engine
+      
+      const createScene = function () {
+        const scene = new BABYLON.Scene(engine);
+        const axes = new BABYLON.Debug.AxesViewer(scene, 10);
+        scene.clearColor = new BABYLON.Color3(0.40, 0.42, 0.41);
+        scene.useRightHandedSystem = true;
+
+        BABYLON.SceneLoader.ImportMesh("", "/static/", "pi-pan-tilt.glb", scene);
+
+        const z_lines = [], x_lines = [];
+        for (var i = 0; i < 12; i++) 
+            z_lines.push( [ new BABYLON.Vector3(i * 10, 0, 0), new BABYLON.Vector3(i * 10, 0, -80)]);
+        for (var i = 0; i < 9; i++)
+            x_lines.push( [ new BABYLON.Vector3(0, 0, -i * 10), new BABYLON.Vector3(110, 0, -i * 10)]);
+
+        const z_grid = BABYLON.MeshBuilder.CreateLineSystem("lineSystemZ", {lines: z_lines}); 
+	    z_grid.color = new BABYLON.Color3(0.7, 0.8, 0.8);
+        const x_grid = BABYLON.MeshBuilder.CreateLineSystem("lineSystemX", {lines: x_lines}); 
+	    x_grid.color = new BABYLON.Color3(0.7, 0.8, 0.8);
+
+        const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI/3.8, Math.PI / 2.5, 220, new BABYLON.Vector3(20, 30, -30));
+        camera.attachControl(canvas, true);
+        const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(-10, 500, 10));
+        light.intensity = 0.6;
+
+        return scene;
+      };
+
+      const scene = createScene(); //Call the createScene function
+
+      // Register a render loop to repeatedly render the scene
+      engine.runRenderLoop(function () {
+        scene.render();
+      });
+
+      // Watch for browser/canvas resize events
+      window.addEventListener("resize", function () {
+        engine.resize();
+      });
+
+      function servo(action, radians) {
+        let actual = fetch(`/${action}/${radians}`)
+            .then((response) => response.json())
+            .then(data => { 
+                if (Math.abs(data.actual) < 0.001)
+                    return 0;
+                return data.actual;
+            })
+            .catch( err => { return 0; } );        
+      }
+
+      $(document).ready(function() {
+        function pan(angle) {
+            var alpha = 0;
+            const inc = angle / Math.abs(angle) * 0.1;
+            scene.registerBeforeRender(function () {
+                while (Math.abs(alpha) < Math.abs(angle)) {
+                    const actual = servo('pan', inc);
+                    if (Math.abs(actual) < 0.01)
+                        break;
+                    const mesh = scene.getMeshByID('pan');
+                    mesh.rotate(BABYLON.Axis.Y, actual); 
+                    alpha += actual;
+                }
+            });
+        };
+
+        function tilt(angle) {
+            var gamma = 0;
+            const inc = angle / Math.abs(angle) * 0.01;
+            scene.registerBeforeRender(function () {
+                while (Math.abs(gamma) < Math.abs(angle)) {
+                    const actual = servo('tilt', inc);
+                    if (Math.abs(actual) < 0.01)
+                        break;
+                    const mesh = scene.getMeshByID('tilt');
+                    mesh.rotate(BABYLON.Axis.Z, actual); 
+                    gamma += inc;
+                }
+            });
+        };
+
+        scene.getMeshByID('tilt').rotate(BABYLON.Axis.Z, 25 * Math.PI / 180);
+        scene.getMeshByID('pan').rotate(BABYLON.Axis.Y, -135 * Math.PI / 180);
+
+        $('button').on('click', function(e) {
+            const direction = $(this).prop('title');
+            if (direction == '⭠' || direction == '⭢') {
+                angle = Math.PI/20;
+                if (direction == '⭠')
+                    angle = -angle;
+                pan(angle);     
+            }
+            else if (direction == '⭡' || direction == '⭣') {
+                angle = Math.PI/20;
+                if (direction == '⭡')
+                    angle = -angle;
+                tilt(angle);     
+            }
+            else if (direction = '⭯') {
+                // TODO: grand finale
+            }
+        });
+      });
+    </script>
+</body>
+</html>
