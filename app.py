@@ -11,6 +11,10 @@ __TILT_MAX = 110
 pan_position = __PAN_ORIGIN
 tilt_position = __TILT_ORIGIN
 
+@app.context_processor
+def position_processor():
+    return dict(pan_position=pan_position, tilt_position=tilt_position, __PAN_ORIGIN=__PAN_ORIGIN, __TILT_ORIGIN=__TILT_ORIGIN)
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -26,7 +30,7 @@ def tilt(radians):
     tilt_position += degrees
     # TODO: drive the SG90 servo to rotate to tilt_position
 
-    return jsonify(actual = math.radians(degrees)), 200
+    return jsonify(actual = math.radians(degrees), pan = math.radians(pan_position), tilt = math.radians(tilt_position)), 200
 
 @app.route('/pan/<radians>')
 def pan(radians):
@@ -39,4 +43,4 @@ def pan(radians):
     pan_position += degrees
     # TODO: drive the MG90S servo to rotate to pan_position
 
-    return jsonify(actual = math.radians(degrees)), 200
+    return jsonify(actual = math.radians(degrees), pan = math.radians(pan_position), tilt = math.radians(tilt_position)), 200

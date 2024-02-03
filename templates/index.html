@@ -72,17 +72,26 @@
             <button type="button" class="btn" title="⭯"><i class="fa-solid fa-arrow-rotate-left"></i></button>
         </div>
     </div>
-    <script>
+    <script>     
       const canvas = document.getElementById("renderCanvas"); // Get the canvas element
       const engine = new BABYLON.Engine(canvas, true); // Generate the BABYLON 3D engine
       
+      const origin_pan = {{ __PAN_ORIGIN }};
+      const origin_tilt = {{ __TILT_ORIGIN }};
+
+      let current_pan = {{ pan_position }};
+      let current_tilt = {{ tilt_position }};
+
       const createScene = function () {
         const scene = new BABYLON.Scene(engine);
         const axes = new BABYLON.Debug.AxesViewer(scene, 10);
         scene.clearColor = new BABYLON.Color3(0.40, 0.42, 0.41);
         scene.useRightHandedSystem = true;
 
-        BABYLON.SceneLoader.ImportMesh("", "/static/", "pi-pan-tilt.glb", scene);
+        BABYLON.SceneLoader.ImportMesh("", "/static/", "pi-pan-tilt.glb", scene, function() {
+            scene.getMeshByID('tilt').rotate(BABYLON.Axis.Z, current_tilt * Math.PI / 180);
+            scene.getMeshByID('pan').rotate(BABYLON.Axis.Y, current_pan * Math.PI / 180);
+        });
 
         const z_lines = [], x_lines = [];
         for (var i = 0; i < 12; i++) 
@@ -103,6 +112,47 @@
         return scene;
       };
 
+      async function driveServo(action, radians) {   
+        return await fetch(`/${action}/${radians}`)
+            .then((response) => response.json())
+            .then(json => { 
+                current_pan = json.pan;
+                current_tilt = json.tilt;
+
+                let actual = json.actual;
+                if (Math.abs(actual) < 0.001)
+                    return 0;
+                return actual;
+            })
+            .catch(() => 0);
+      }
+
+      async function pan(scene, radians) {
+        var alpha = 0;
+        const step = radians > 0? 0.1 : -0.1;        
+        const mesh = scene.getMeshByID('pan');
+        while (Math.abs(alpha) < Math.abs(radians)) {
+            const actual = await driveServo('pan', step);
+            if (Math.abs(actual) < 0.001)
+                break;
+            mesh.rotate(BABYLON.Axis.Y, actual); 
+            alpha += actual;
+        }
+      };
+
+      async function tilt(scene, radians) {
+        var gamma = 0;
+        const step = radians > 0? 0.1 : -0.1;       
+        const mesh = scene.getMeshByID('tilt');
+        while (Math.abs(gamma) < Math.abs(radians)) {
+            const actual = await driveServo('tilt', step);
+            if (Math.abs(actual) < 0.001)
+                break;
+            mesh.rotate(BABYLON.Axis.Z, actual); 
+            gamma += actual;
+        }
+      };
+
       const scene = createScene(); //Call the createScene function
 
       // Register a render loop to repeatedly render the scene
@@ -115,68 +165,28 @@
         engine.resize();
       });
 
-      function servo(action, radians) {
-        let actual = fetch(`/${action}/${radians}`)
-            .then((response) => response.json())
-            .then(data => { 
-                if (Math.abs(data.actual) < 0.001)
-                    return 0;
-                return data.actual;
-            })
-            .catch( err => { return 0; } );        
-      }
-
       $(document).ready(function() {
-        function pan(angle) {
-            var alpha = 0;
-            const inc = angle / Math.abs(angle) * 0.1;
-            scene.registerBeforeRender(function () {
-                while (Math.abs(alpha) < Math.abs(angle)) {
-                    const actual = servo('pan', inc);
-                    if (Math.abs(actual) < 0.01)
-                        break;
-                    const mesh = scene.getMeshByID('pan');
-                    mesh.rotate(BABYLON.Axis.Y, actual); 
-                    alpha += actual;
-                }
-            });
-        };
-
-        function tilt(angle) {
-            var gamma = 0;
-            const inc = angle / Math.abs(angle) * 0.01;
-            scene.registerBeforeRender(function () {
-                while (Math.abs(gamma) < Math.abs(angle)) {
-                    const actual = servo('tilt', inc);
-                    if (Math.abs(actual) < 0.01)
-                        break;
-                    const mesh = scene.getMeshByID('tilt');
-                    mesh.rotate(BABYLON.Axis.Z, actual); 
-                    gamma += inc;
-                }
-            });
-        };
-
-        scene.getMeshByID('tilt').rotate(BABYLON.Axis.Z, 25 * Math.PI / 180);
-        scene.getMeshByID('pan').rotate(BABYLON.Axis.Y, -135 * Math.PI / 180);
-
-        $('button').on('click', function(e) {
+        $('button').on('click', async function(e) {
+            $('button').prop('disabled', true);
             const direction = $(this).prop('title');
             if (direction == '⭠' || direction == '⭢') {
-                angle = Math.PI/20;
+                radians = Math.PI / 20;
                 if (direction == '⭠')
-                    angle = -angle;
-                pan(angle);     
+                    radians = -radians;
+                await pan(scene, radians);     
             }
             else if (direction == '⭡' || direction == '⭣') {
-                angle = Math.PI/20;
+                radians = Math.PI / 20;
                 if (direction == '⭡')
-                    angle = -angle;
-                tilt(angle);     
+                    radians = -radians;
+                await tilt(scene, radians);     
             }
-            else if (direction = '⭯') {
+            else if (direction == '⭯') {
                 // TODO: grand finale
+                await pan(scene, origin_pan - current_pan);
+                await tilt(scene, current_tilt - origin_tilt);    
             }
+            $('button').prop('disabled', false);
         });
       });
     </script>
