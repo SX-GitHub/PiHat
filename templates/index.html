@@ -107,8 +107,8 @@
 
         const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI/3.8, Math.PI / 2.5, 220, new BABYLON.Vector3(20, 30, -30));
         camera.attachControl(canvas, true);
-        const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(-10, 500, 10));
-        light.intensity = 0.6;
+        const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0));
+        light.intensity = 1;
 
         return scene;
       };
